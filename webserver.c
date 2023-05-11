@@ -9,6 +9,7 @@
 #include <pthread.h>
 #include <sys/stat.h>
 #include <arpa/inet.h>
+#include <sys/sendfile.h>
 
 #define BUFFER_SIZE 10240
 #define TRUE 1
@@ -217,11 +218,7 @@ void send_file(int client_socket, char* file_path) {
     sprintf(headers, "HTTP/1.1 200 OK\r\nContent-Length: %ld\r\n\r\n", buf.st_size);
     send(client_socket, headers, strlen(headers), 0);
 
-    char buffer[BUFFER_SIZE];
-    int bytes_read;
-    while ((bytes_read = read(file_descriptor, buffer, BUFFER_SIZE)) > 0) {
-        send(client_socket, buffer, bytes_read, 0);
-    }
+    sendfile(client_socket, file_descriptor, 0, buf.st_size);
     close(file_descriptor);
 }
 
