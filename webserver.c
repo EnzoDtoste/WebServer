@@ -213,9 +213,10 @@ void send_file(int client_socket, char* file_path) {
     struct stat buf;
     fstat (file_descriptor, &buf);   
 
-    char header [100];
-    char* name = strrchr(file_path, '/');
-    sprintf (header, "HTTP/1.1 200 OK\\r\\nContent-Length: %ld\\r\\nContent-Disposition: attachment; filename=%s\\r\\n\\r\\n", buf.st_size, name + 1);
+    char headers[BUFFER_SIZE];
+    sprintf(headers, "HTTP/1.1 200 OK\r\nContent-Length: %ld\r\n\r\n", buf.st_size);
+    send(client_socket, headers, strlen(headers), 0);
+
     char buffer[BUFFER_SIZE];
     int bytes_read;
     while ((bytes_read = read(file_descriptor, buffer, BUFFER_SIZE)) > 0) {
@@ -308,6 +309,6 @@ int main(int argc, char **argv) {
         }
     }
     else
-        printf("You must specify port and path");
+        printf("You must specify port and path\n");
     return 0;
 }
