@@ -10,8 +10,9 @@
 #include <sys/stat.h>
 #include <arpa/inet.h>
 #include <sys/sendfile.h>
+#include <math.h>
 
-#define BUFFER_SIZE 10240
+#define BUFFER_SIZE 102400
 #define TRUE 1
 #define FALSE 0
 
@@ -134,6 +135,71 @@ void freeNodo(struct nodo* raiz)
 
 char* init_path;
 
+int contarPorcentajes (char* str, int longitud) {
+    int i = 0, j = 0;
+    while (i + 2 < longitud) {
+        if (str [i] == '%' && str [i+1] == '2' && str [i+2] == '0') {
+            j++;
+            i += 3;
+        } else {
+            i++;
+        }
+    }
+    return j;
+}
+
+char* reemplazarPorcentajes (char* str, int longitud) {
+    int x = contarPorcentajes(str, longitud);
+    int nuevaLongitud = longitud - x * 2;
+
+    char* nuevoString = malloc ( (nuevaLongitud + 1) * sizeof (char));
+
+    int i = 0, j = 0;
+    while (i < nuevaLongitud) {
+        if (str [j] == '%' && str [j+1] == '2' && str [j+2] == '0') {
+            nuevoString [i++] = ' ';
+            j += 3;
+        } else {
+            nuevoString [i++] = str [j++];
+        }
+    }
+    nuevoString [nuevaLongitud] = '\0';
+
+    return nuevoString;
+}
+
+char* formatearTamaño (off_t bytes) {
+    char* buffer = malloc (20 * sizeof (char));
+
+    double tamaño;
+    char* unidad;
+
+    if (bytes >= 1073741824) {
+        tamaño = (double) bytes / 1073741824;
+        unidad = "GB";
+    }
+    else if (bytes >= 1048576) {
+        tamaño = (double) bytes / 1048576;
+        unidad = "MB";
+    }
+    else if (bytes >= 1024) {
+        tamaño = (double) bytes / 1024;
+        unidad = "KB";
+    }
+    else
+    {
+        tamaño = (double) bytes;
+        unidad = "B";
+    }
+
+    if (floor(tamaño) == tamaño)
+        sprintf (buffer, "%.0f %s", tamaño, unidad);
+    else
+        sprintf (buffer, "%.2f %s", tamaño, unidad);
+    return buffer;
+}
+
+
 void send_response(int client_socket, char* response, int response_length) {
     char headers[BUFFER_SIZE];
     sprintf(headers, "HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n", response_length);
@@ -180,12 +246,15 @@ void send_directory_listing(int client_socket, char* directory_path) {
     char response[BUFFER_SIZE];
     int response_length = 0;
 
-    response_length += sprintf(response + response_length, "<html><head><title>Directorio %s</title></head><body><table><tr><th>Name</th><th>Size</th><th>Last Modification Date</th></tr>", directory_path);
+    response_length += sprintf(response + response_length, "<html><head> <meta charset=\"UTF-8\"> <style> .bi-folder-fill-yellow{display:inline-block;width:1em;height:1em;vertical-align:-0.125em;background-image:url(\"data:image/svg+xml,%%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%%23f7d51d'%%3E%%3Cpath d='M14.5 6h-5.8l-1-2H4.5c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h9c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zM7 12H5v-2h2v2zm0-3H5V7h2v2z'/%%3E%%3C/svg%%3E\");background-repeat:no-repeat;background-size:1em} i { margin-right: 5px; } table{width:80%%;max-width:1000px;margin-left:auto;margin-right:auto;border-collapse:collapse}thead{background-color:#333;color:#fff}th{padding:12px}tbody tr:nth-child(even){background-color:#f2f2f2}td{padding:10px}td:first-child{text-align:left}td:last-child{text-align:center}td:nth-child(2){text-align:right;padding-right:20px} </style><title>Directorio %s</title></head><body><table><tr><th>Name</th><th>Size</th><th>Last Modification Date</th></tr>", directory_path);
 
     struct nodo* folder = folders;
     while(folder != NULL)
     {
-        response_length += sprintf(response + response_length, "<tr><td><a href=\"%s/\">%s</a></td><td></td><td>%s</td></tr>", folder->entry->d_name, folder->entry->d_name, ctime(&(folder->st).st_mtime));
+        struct tm* t = localtime(&(folder->st).st_mtime);
+        char buffer [20];
+        strftime(buffer, 20, "%d-%m-%Y %H:%M", t); 
+        response_length += sprintf(response + response_length, "<tr><td><i class=\"bi bi-folder-fill-yellow\"></i><a href=\"%s/\">%s</a></td><td></td><td>%s</td></tr>", folder->entry->d_name, folder->entry->d_name, buffer);
         folder = folder->sig;
     }
     freeNodo(folders);
@@ -193,8 +262,13 @@ void send_directory_listing(int client_socket, char* directory_path) {
     struct nodo* file = files;
     while(file != NULL)
     {
-        response_length += sprintf(response + response_length, "<tr><td><a href=\"%s/\" download=\"%s\">%s</a></td><td>%ld</td><td>%s</td></tr>", file->entry->d_name, file->entry->d_name, file->entry->d_name, (file->st).st_size, ctime(&(file->st).st_mtime));
+        struct tm* t = localtime(&(file->st).st_mtime); 
+        char buffer [20];
+        strftime(buffer, 20, "%d-%m-%Y %H:%M", t);
+        char *size = formatearTamaño((file->st).st_size);
+        response_length += sprintf(response + response_length, "<tr><td><a href=\"%s/\" download=\"%s\">%s</a></td><td style=\"white-space: nowrap;\">%s</td><td>%s</td></tr>", file->entry->d_name, file->entry->d_name, file->entry->d_name, size, buffer);
         file = file->sig;
+        free(size);
     }
     freeNodo(files);
 
@@ -230,10 +304,11 @@ void handle_request(int client_socket, char* request) {
         send_response(client_socket, "Method not allowed", strlen("Method not allowed"));
         return;
     }
+    char* newpath = reemplazarPorcentajes(path, strlen(path));
     int len1 = strlen(init_path);
-    int len2 = strlen(path);
+    int len2 = strlen(newpath);
     char newPath[len1 + len2];
-    sprintf(newPath, "%s%s", init_path, path);
+    sprintf(newPath, "%s%s", init_path, newpath);
     newPath[len1 + len2] = '\0';
     struct stat st;
     if (stat(newPath, &st) == 0) {
@@ -247,6 +322,7 @@ void handle_request(int client_socket, char* request) {
     else {
         send_file(client_socket, newPath);
     }
+    free(newpath);
 }
 
 void* handle_client(void* arg) {
