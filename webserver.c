@@ -10,7 +10,6 @@
 #include <sys/stat.h>
 #include <arpa/inet.h>
 #include <sys/sendfile.h>
-#include <math.h>
 #include <sys/signal.h>
 
 #define BUFFER_SIZE 102400
@@ -230,7 +229,11 @@ char* formatearTamaño (off_t bytes) {
         unidad = "B";
     }
 
-    if (floor(tamaño) == tamaño)
+    char temp[BUFFER_SIZE];
+    sprintf(temp, "%.0f", tamaño);
+    int tsize = atoi(temp);
+
+    if (tsize - tamaño == 0)
         sprintf (buffer, "%.0f %s", tamaño, unidad);
     else
         sprintf (buffer, "%.2f %s", tamaño, unidad);
