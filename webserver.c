@@ -189,37 +189,21 @@ void freeNodo(struct nodo* raiz)
 char* init_path;
 int server_socket;
 
-int contarPorcentajes (char* str, int longitud) {
-    int i = 0, j = 0;
-    while (i + 2 < longitud) {
-        if (str [i] == '%' && str [i+1] == '2' && str [i+2] == '0') {
-            j++;
-            i += 3;
-        } else {
-            i++;
-        }
-    }
-    return j;
-}
+char *url_to_path(char *path) { 
+    char *decoded_str; 
 
-char* reemplazarPorcentajes (char* str, int longitud) {
-    int x = contarPorcentajes(str, longitud);
-    int nuevaLongitud = longitud - x * 2;
+    decoded_str = malloc(strlen(path) + 1); 
+    strcpy(decoded_str, path); 
+    char *pos = decoded_str; 
+    while ((pos = strstr(pos, "%")) != NULL) { 
+        char hex[3]; 
+        strncpy(hex, pos + 1, 2); 
+        hex[2] = '\0'; 
+        *pos = (char) strtol(hex, NULL, 16); 
+        memmove(pos + 1, pos + 3, strlen(pos + 3) + 1); 
+    } 
 
-    char* nuevoString = malloc ( (nuevaLongitud + 1) * sizeof (char));
-
-    int i = 0, j = 0;
-    while (i < nuevaLongitud) {
-        if (str [j] == '%' && str [j+1] == '2' && str [j+2] == '0') {
-            nuevoString [i++] = ' ';
-            j += 3;
-        } else {
-            nuevoString [i++] = str [j++];
-        }
-    }
-    nuevoString [nuevaLongitud] = '\0';
-
-    return nuevoString;
+    return decoded_str; 
 }
 
 char* formatearTamaño (off_t bytes) {
@@ -419,7 +403,7 @@ void handle_request(int client_socket, char* request) {
         send_response(client_socket, "Method not allowed", strlen("Method not allowed"));
         return;
     }
-    char* newpath = reemplazarPorcentajes(path, strlen(path));
+    char* newpath = url_to_path(path);
 
     int fieldOrder = NAME;
     int Asc = TRUE;
