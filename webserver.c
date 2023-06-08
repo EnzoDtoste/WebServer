@@ -11,6 +11,7 @@
 #include <arpa/inet.h>
 #include <sys/sendfile.h>
 #include <sys/signal.h>
+#include <ctype.h>
 
 #define BUFFER_SIZE 102400
 #define TRUE 1
@@ -188,21 +189,30 @@ void freeNodo(struct nodo* raiz)
 char* init_path;
 int server_socket;
 
-char *url_to_path(char *path) { 
-    char *decoded_str; 
+char* url_to_path(const char* input) {
+    int len = strlen(input);
+    char* output = (char*)malloc((len + 1) * sizeof(char));
+    int i, j = 0;
 
-    decoded_str = malloc(strlen(path) + 1); 
-    strcpy(decoded_str, path); 
-    char *pos = decoded_str; 
-    while ((pos = strstr(pos, "%")) != NULL) { 
-        char hex[3]; 
-        strncpy(hex, pos + 1, 2); 
-        hex[2] = '\0'; 
-        *pos = (char) strtol(hex, NULL, 16); 
-        memmove(pos + 1, pos + 3, strlen(pos + 3) + 1); 
-    } 
+    for (i = 0; i < len; i++) {
+        if (input[i] == '+') {
+            output[j++] = ' ';
+        } else if (input[i] == '%') {
+            if (isxdigit(input[i + 1]) && isxdigit(input[i + 2])) {
+                char hex[3] = { input[i + 1], input[i + 2], '\0' };
+                output[j++] = (char)strtol(hex, NULL, 16);
+                i += 2;
+            } else {
+                free(output);
+                return NULL;
+            }
+        } else {
+            output[j++] = input[i];
+        }
+    }
 
-    return decoded_str; 
+    output[j] = '\0';
+    return output;
 }
 
 char* formatearTamaño (off_t bytes) {
@@ -244,8 +254,8 @@ char* formatearTamaño (off_t bytes) {
 void send_response(int client_socket, char* response, int response_length) {
     char headers[BUFFER_SIZE];
     sprintf(headers, "HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n", response_length);
-    send(client_socket, headers, strlen(headers), 0);
-    send(client_socket, response, response_length, 0);
+    send(client_socket, headers, strlen(headers), MSG_NOSIGNAL);
+    send(client_socket, response, response_length, MSG_NOSIGNAL);
 }
 
 void send_directory_listing(int client_socket, char* directory_path, int fieldOrder, int Asc) {
@@ -329,7 +339,7 @@ void send_directory_listing(int client_socket, char* directory_path, int fieldOr
             char buffer [20];
             strftime(buffer, 20, "%d-%m-%Y %H:%M", t);
             char *size = formatearTamaño((file->st).st_size);
-            response_length += sprintf(response + response_length, "<tr><td><a href=\"%s/\" download=\"%s\">%s</a></td><td style=\"white-space: nowrap;\">%s</td><td>%s</td></tr>", file->entry->d_name, file->entry->d_name, file->entry->d_name, size, buffer);
+            response_length += sprintf(response + response_length, "<tr><td><a href=\"javascript:void(0)\" onclick=\"clickFile('%s')\">%s</a></td><td style=\"white-space: nowrap;\">%s</td><td>%s</td></tr>", file->entry->d_name, file->entry->d_name, size, buffer);
             file = file->sig;
             free(size);
         }
@@ -341,7 +351,7 @@ void send_directory_listing(int client_socket, char* directory_path, int fieldOr
             struct tm* t = localtime(&(folder->st).st_mtime);
             char buffer [20];
             strftime(buffer, 20, "%d-%m-%Y %H:%M", t); 
-            response_length += sprintf(response + response_length, "<tr><td><i class=\"bi bi-folder-fill-yellow\"></i><a href=\"%s/\">%s</a></td><td></td><td>%s</td></tr>", folder->entry->d_name, folder->entry->d_name, buffer);
+            response_length += sprintf(response + response_length, "<tr><td><i class=\"bi bi-folder-fill-yellow\"></i><a href=\"javascript:void(0)\" onclick=\"window.location.href = encodeURIComponent('%s') + '/'\">%s</a></td><td></td><td>%s</td></tr>", folder->entry->d_name, folder->entry->d_name, buffer);
             folder = folder->sig;
         }
         freeNodo(folders);
@@ -355,7 +365,7 @@ void send_directory_listing(int client_socket, char* directory_path, int fieldOr
             struct tm* t = localtime(&(folder->st).st_mtime);
             char buffer [20];
             strftime(buffer, 20, "%d-%m-%Y %H:%M", t); 
-            response_length += sprintf(response + response_length, "<tr><td><i class=\"bi bi-folder-fill-yellow\"></i><a href=\"%s/\">%s</a></td><td></td><td>%s</td></tr>", folder->entry->d_name, folder->entry->d_name, buffer);
+            response_length += sprintf(response + response_length, "<tr><td><i class=\"bi bi-folder-fill-yellow\"></i><a href=\"javascript:void(0)\" onclick=\"window.location.href = encodeURIComponent('%s') + '/'\">%s</a></td><td></td><td>%s</td></tr>", folder->entry->d_name, folder->entry->d_name, buffer);
             folder = folder->sig;
         }
         freeNodo(folders);
@@ -367,13 +377,14 @@ void send_directory_listing(int client_socket, char* directory_path, int fieldOr
             char buffer [20];
             strftime(buffer, 20, "%d-%m-%Y %H:%M", t);
             char *size = formatearTamaño((file->st).st_size);
-            response_length += sprintf(response + response_length, "<tr><td><a href=\"%s/\" download=\"%s\">%s</a></td><td style=\"white-space: nowrap;\">%s</td><td>%s</td></tr>", file->entry->d_name, file->entry->d_name, file->entry->d_name, size, buffer);
+            response_length += sprintf(response + response_length, "<tr><td><a href=\"javascript:void(0)\" onclick=\"clickFile('%s')\">%s</a></td><td style=\"white-space: nowrap;\">%s</td><td>%s</td></tr>", file->entry->d_name, file->entry->d_name, size, buffer);
             file = file->sig;
             free(size);
         }
         freeNodo(files);
     }
 
+    response_length += sprintf(response + response_length, "<script> function clickFile(fileName) { var link = document.createElement(\"a\"); link.href = encodeURIComponent(fileName) + '/'; link.download = fileName; link.click(); } </script>");
     response_length += sprintf(response + response_length, "</table></body></html>");
 
     closedir(directory);
@@ -392,9 +403,17 @@ void send_file(int client_socket, char* file_path) {
 
     char headers[BUFFER_SIZE];
     sprintf(headers, "HTTP/1.1 200 OK\r\nContent-Length: %ld\r\n\r\n", buf.st_size);
-    send(client_socket, headers, strlen(headers), 0);
+    send(client_socket, headers, strlen(headers), MSG_NOSIGNAL);
 
-    sendfile(client_socket, file_descriptor, 0, buf.st_size);
+    char buffer[BUFFER_SIZE];
+    ssize_t bytes_read;
+    while ((bytes_read = read(file_descriptor, buffer, sizeof(buffer))) > 0) {
+        if (send(client_socket, buffer, bytes_read, MSG_NOSIGNAL) == -1) {
+            break;
+        }
+    }
+
+    //sendfile(client_socket, file_descriptor, 0, buf.st_size);
     close(file_descriptor);
 }
 
@@ -489,50 +508,53 @@ void sigint_handler (int sig) {
 
 int main(int argc, char **argv) {
     signal(SIGINT, sigint_handler);
+    
+    int PORT = 8080;
+    init_path = "/home";
+
     if(argc >= 3)
     {
-        int PORT = atoi(argv[1]);
+        PORT = atoi(argv[1]);
         init_path = argv[2];
-
-        int client_socket;
-        struct sockaddr_in server_address, client_address;
-        socklen_t address_length = sizeof(client_address);
-        server_socket = socket(AF_INET, SOCK_STREAM, 0);
-        if (server_socket == -1) {
-            printf("Error creating socket\n");
-            return -1;
-        }
-        memset(&server_address, 0, sizeof(server_address));
-        server_address.sin_family = AF_INET;
-        server_address.sin_addr.s_addr = INADDR_ANY;
-        server_address.sin_port = htons(PORT);
-        if (bind(server_socket, (struct sockaddr*)&server_address, sizeof(server_address)) == -1) {
-            printf("Error binding socket\n");
-            return -1;
-        }
-        if (listen(server_socket, 10) == -1) {
-            printf("Error listening on socket\n");
-            return -1;
-        }
-        
-        printf("Server listening on port %d\n", PORT);
-        while (1) {
-            client_socket = accept(server_socket, (struct sockaddr*)&client_address, &address_length);
-            if (client_socket == -1) {
-                printf("Error accepting connection\n");
-                continue;
-            }
-            int* arg = malloc(sizeof(int));
-            *arg = client_socket;
-            pthread_t thread;
-            if (pthread_create(&thread, NULL, handle_client, arg) != 0) {
-                printf("Error creating thread\n");
-                continue;
-            }
-            pthread_detach(thread);
-        }
     }
-    else
-        printf("You must specify port and path\n");
+
+    int client_socket;
+    struct sockaddr_in server_address, client_address;
+    socklen_t address_length = sizeof(client_address);
+    server_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_socket == -1) {
+        printf("Error creating socket\n");
+        return -1;
+    }
+    memset(&server_address, 0, sizeof(server_address));
+    server_address.sin_family = AF_INET;
+    server_address.sin_addr.s_addr = INADDR_ANY;
+    server_address.sin_port = htons(PORT);
+    if (bind(server_socket, (struct sockaddr*)&server_address, sizeof(server_address)) == -1) {
+        printf("Error binding socket\n");
+        return -1;
+    }
+    if (listen(server_socket, 10) == -1) {
+        printf("Error listening on socket\n");
+        return -1;
+    }
+    
+    printf("Server listening on port %d\n", PORT);
+    while (1) {
+        client_socket = accept(server_socket, (struct sockaddr*)&client_address, &address_length);
+        if (client_socket == -1) {
+            printf("Error accepting connection\n");
+            continue;
+        }
+        int* arg = malloc(sizeof(int));
+        *arg = client_socket;
+        pthread_t thread;
+        if (pthread_create(&thread, NULL, handle_client, arg) != 0) {
+            printf("Error creating thread\n");
+            continue;
+        }
+        pthread_detach(thread);
+    }
+    
     return 0;
 }
