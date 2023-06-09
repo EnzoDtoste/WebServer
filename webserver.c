@@ -265,6 +265,12 @@ void send_directory_listing(int client_socket, char* directory_path, int fieldOr
     DIR* directory = opendir(directory_path);
     struct dirent* entry;
 
+    if(directory == NULL)
+    {
+        send_response(client_socket, "You are not allowed to read this file", strlen("You are not allowed to read this file"));
+        return;
+    }
+
     while ((entry = readdir(directory)) != NULL) {
         struct stat st;
         char name[BUFFER_SIZE];
@@ -510,7 +516,7 @@ int main(int argc, char **argv) {
     signal(SIGINT, sigint_handler);
     
     int PORT = 8080;
-    init_path = "/home";
+    init_path = "/";
 
     if(argc >= 3)
     {
